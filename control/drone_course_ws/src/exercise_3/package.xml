@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>exercise_3</name>
+  <version>0.1.0</version>
+  <description>exercise_3 node</description>
+  <maintainer email="r.psegui@upm.es">Rafael Pérez Seguí</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- core dependencies  -->
+  <depend>ament_cmake</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+
+  <!-- aerostack2 dependencies -->
+  <depend>as2_msgs</depend>
+  <depend>as2_core</depend>
+  <depend>as2_gazebo_assets</depend>
+  <depend>as2_platform_gazebo</depend>
+  <depend>as2_platform_multirotor_simulator</depend>
+  <depend>as2_state_estimator</depend>
+  <depend>as2_motion_controller</depend>
+  <depend>as2_alphanumeric_viewer</depend>
+  <depend>as2_visualization</depend>
+
+  <depend>drone_course_msgs</depend>
+
+  <!-- linting test dependencies -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
