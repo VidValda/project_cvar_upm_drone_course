@@ -28,6 +28,7 @@
 
 
 import argparse
+import array
 import os
 
 import cv2
@@ -44,28 +45,119 @@ class SegmentationLabel:
 
 def segment_image(image: np.ndarray) -> list[SegmentationLabel]:
     # TODO (Exercise 1): Implement an image segmentation algorithm that takes an image as input and returns a list of SegmentationLabel objects.
-    return []
+    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, binary_image = cv2.threshold(image_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    labels = []
+    height, width = image.shape[:2]
+    for contour in contours:
+        polygon = contour.reshape(-1, 2)
+        polygon_norm = [(float(pt[0]) / width, float(pt[1]) / height) for pt in polygon]
+        labels.append(SegmentationLabel(polygon=polygon_norm, class_id=0))
+    return labels
 
 
 def compute_iou(
     image: np.ndarray, labels: list[SegmentationLabel], segmentation: list[SegmentationLabel]
 ) -> float:
     # TODO (Exercise 1): Implement a function that computes the Intersection over Union (IoU) score between the ground truth labels and the predicted segmentation.
-    return 0.0
-
+    height, width = image.shape[:2]
+    mask_ground_truth = np.zeros((height, width), dtype=np.uint8)
+    mask_segmentation = np.zeros((height, width), dtype=np.uint8)
+    
+    for label in labels:
+        if label.polygon is None:
+            continue
+        polygon = np.array(label.polygon) * np.array([image.shape[1], image.shape[0]])
+        polygon = polygon.astype(np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(mask_ground_truth, [polygon], 255)
+    
+    for segment in segmentation:
+        if segment.polygon is None:
+            continue
+        polygon = np.array(segment.polygon) * np.array([image.shape[1], image.shape[0]])
+        polygon = polygon.astype(np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(mask_segmentation, [polygon], 255)
+        
+    intersection = np.bitwise_and(mask_ground_truth, mask_segmentation).sum()
+    union = np.bitwise_or(mask_ground_truth, mask_segmentation).sum()
+    
+    if union == 0:
+        return 0.0 
+    
+    return float(intersection) / float(union)
+    
+def compute_area(polygon: list[Point]) -> float:
+    n = len(polygon)
+    if n < 3:
+        return 0.0
+    area = 0.0
+    for i in range(n):
+        x0, y0 = polygon[i]
+        x1, y1 = polygon[(i + 1) % n]
+        area += x0 * y1 - y0 * x1
+    return abs(area) / 2.0
 
 def compute_precision(
     image: np.ndarray, labels: list[SegmentationLabel], segmentation: list[SegmentationLabel]
 ) -> float:
     # TODO (Exercise 1): Implement a function that computes the Precision score between the ground truth labels and the predicted segmentation.
-    return 0.0
+    height, width = image.shape[:2]
+    mask_ground_truth = np.zeros((height, width), dtype=np.uint8)
+    mask_segmentation = np.zeros((height, width), dtype=np.uint8)
+    
+    for label in labels:
+        if label.polygon is None:
+            continue
+        polygon = np.array(label.polygon) * np.array([image.shape[1], image.shape[0]])
+        polygon = polygon.astype(np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(mask_ground_truth, [polygon], 255)
+    
+    for segment in segmentation:
+        if segment.polygon is None:
+            continue
+        polygon = np.array(segment.polygon) * np.array([image.shape[1], image.shape[0]])
+        polygon = polygon.astype(np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(mask_segmentation, [polygon], 255)
+        
+    intersection = np.bitwise_and(mask_ground_truth, mask_segmentation).sum()
+    area_detec = mask_segmentation.sum()
+    
+    if area_detec == 0:
+        return 0.0 
+    
+    return float(intersection) / float(area_detec)
 
 
 def compute_recall(
     image: np.ndarray, labels: list[SegmentationLabel], segmentation: list[SegmentationLabel]
 ) -> float:
     # TODO (Exercise 1): Implement a function that computes the Recall score between the ground truth labels and the predicted segmentation.
-    return 0.0
+    height, width = image.shape[:2]
+    mask_ground_truth = np.zeros((height, width), dtype=np.uint8)
+    mask_segmentation = np.zeros((height, width), dtype=np.uint8)
+    
+    for label in labels:
+        if label.polygon is None:
+            continue
+        polygon = np.array(label.polygon) * np.array([image.shape[1], image.shape[0]])
+        polygon = polygon.astype(np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(mask_ground_truth, [polygon], 255)
+    
+    for segment in segmentation:
+        if segment.polygon is None:
+            continue
+        polygon = np.array(segment.polygon) * np.array([image.shape[1], image.shape[0]])
+        polygon = polygon.astype(np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(mask_segmentation, [polygon], 255)
+        
+    intersection = np.bitwise_and(mask_ground_truth, mask_segmentation).sum()
+    area_obj = mask_ground_truth.sum()
+    
+    if area_obj == 0:
+        return 0.0 
+    
+    return float(intersection) / float(area_obj)
 
 
 def load_dataset(dataset_path: str) -> list[tuple[cv2.Mat, list[SegmentationLabel]]]:
