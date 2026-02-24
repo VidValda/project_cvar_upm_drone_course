@@ -161,7 +161,6 @@ namespace drone_course
     integral_y_ = std::clamp(integral_y_ + position_error_y * dt_, -max_integral, max_integral);
     integral_z_ = std::clamp(integral_z_ + position_error_z * dt_, -max_integral, max_integral);
 
-    // Skip derivative on first call to avoid spike from uninitialized previous_error
     double derivative_x = 0;
     double derivative_y = 0;
     double derivative_z = 0;

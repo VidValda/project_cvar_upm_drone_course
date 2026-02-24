@@ -89,19 +89,17 @@ namespace drone_course
     geometry_msgs::msg::PoseStamped state_pose_;
     bool control_mode_set_ = false;
     bool path_received_ = false;
-    int path_index_ = 0;
     double dt_ = 0.01;
 
-    std::array<float, 12> path_ = {};
+    // Spline data
+    std::vector<std::array<double, 3>> waypoints_;
+    std::vector<std::array<double, 3>> spline_M_;
+    bool traj_ready_ = false;
+    double traj_t_ = 0.0;
 
-    // PID state
-    double integral_x_ = 0.0;
-    double integral_y_ = 0.0;
-    double integral_z_ = 0.0;
-    double previous_error_x_ = 0.0;
-    double previous_error_y_ = 0.0;
-    double previous_error_z_ = 0.0;
-    bool pid_initialized_ = false;
+    // Pure Pursuit parameters
+    double lookahead_dist_ = 1.0;
+    double desired_speed_ = 4.0;
 
   private:
     // Callbacks Subscribers
@@ -119,6 +117,15 @@ namespace drone_course
      * @brief Timer callback
      */
     void timer_callback();
+
+    void build_spline();
+    std::array<double, 3> sample_spline(double t) const;
+    std::array<double, 3> sample_spline_deriv(double t) const;
+    static std::vector<double> solve_linear_system(
+        std::vector<std::vector<double>> A, std::vector<double> b);
+
+    double find_closest_t(double x, double y, double z) const;
+    double find_lookahead_t(double t_proj, double lookahead) const;
   };
 } // namespace drone_course
 

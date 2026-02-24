@@ -27,6 +27,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <exercise_3/exercise_3.hpp>
 
 namespace drone_course
@@ -76,11 +78,166 @@ namespace drone_course
 
   DroneCourseExercise3::~DroneCourseExercise3() {}
 
+  std::vector<double> DroneCourseExercise3::solve_linear_system(
+      std::vector<std::vector<double>> A, std::vector<double> b)
+  {
+    int N = static_cast<int>(b.size());
+    for (int col = 0; col < N; col++)
+    {
+      int pivot = col;
+      for (int row = col + 1; row < N; row++)
+        if (std::abs(A[row][col]) > std::abs(A[pivot][col]))
+          pivot = row;
+      std::swap(A[col], A[pivot]);
+      std::swap(b[col], b[pivot]);
+      for (int row = col + 1; row < N; row++)
+      {
+        double f = A[row][col] / A[col][col];
+        for (int k = col; k < N; k++)
+          A[row][k] -= f * A[col][k];
+        b[row] -= f * b[col];
+      }
+    }
+    std::vector<double> x(N);
+    for (int i = N - 1; i >= 0; i--)
+    {
+      x[i] = b[i];
+      for (int j = i + 1; j < N; j++)
+        x[i] -= A[i][j] * x[j];
+      x[i] /= A[i][i];
+    }
+    return x;
+  }
+
+  void DroneCourseExercise3::build_spline()
+  {
+    int N = static_cast<int>(waypoints_.size());
+    spline_M_.assign(N, {0.0, 0.0, 0.0});
+
+    // C2 continuity
+    std::vector<std::vector<double>> A(N, std::vector<double>(N, 0.0));
+    for (int i = 0; i < N; i++)
+    {
+      A[i][i] = 4.0;
+      A[i][(i + 1) % N] = 1.0;
+      A[i][(i - 1 + N) % N] = 1.0;
+    }
+
+    for (int k = 0; k < 3; k++)
+    {
+      std::vector<double> d(N);
+      for (int i = 0; i < N; i++)
+      {
+        d[i] = 6.0 * (waypoints_[(i + 1) % N][k] - 2.0 * waypoints_[i][k] + waypoints_[(i - 1 + N) % N][k]);
+      }
+      auto M = solve_linear_system(A, d);
+      for (int i = 0; i < N; i++)
+        spline_M_[i][k] = M[i];
+    }
+  }
+
+  std::array<double, 3> DroneCourseExercise3::sample_spline(double t) const
+  {
+    int N = static_cast<int>(waypoints_.size());
+    double t_mod = std::fmod(t, static_cast<double>(N));
+    if (t_mod < 0.0)
+      t_mod += N;
+
+    int i = static_cast<int>(t_mod);
+    double s = t_mod - i;
+    int j = (i + 1) % N;
+
+    std::array<double, 3> result;
+    for (int k = 0; k < 3; k++)
+    {
+      double p_i = waypoints_[i][k];
+      double p_j = waypoints_[j][k];
+      double m_i = spline_M_[i][k];
+      double m_j = spline_M_[j][k];
+      result[k] = (1.0 - s) * p_i + s * p_j + (m_i * (1.0 - s) * ((1.0 - s) * (1.0 - s) - 1.0) + m_j * s * (s * s - 1.0)) / 6.0;
+    }
+    return result;
+  }
+
+  std::array<double, 3> DroneCourseExercise3::sample_spline_deriv(double t) const
+  {
+    int N = static_cast<int>(waypoints_.size());
+    double t_mod = std::fmod(t, static_cast<double>(N));
+    if (t_mod < 0.0)
+      t_mod += N;
+
+    int i = static_cast<int>(t_mod);
+    double s = t_mod - i;
+    int j = (i + 1) % N;
+
+    std::array<double, 3> result;
+    for (int k = 0; k < 3; k++)
+    {
+      double p_i = waypoints_[i][k];
+      double p_j = waypoints_[j][k];
+      double m_i = spline_M_[i][k];
+      double m_j = spline_M_[j][k];
+      result[k] = (p_j - p_i) + (m_i * (1.0 - 3.0 * (1.0 - s) * (1.0 - s)) + m_j * (3.0 * s * s - 1.0)) / 6.0;
+    }
+    return result;
+  }
+
+  double DroneCourseExercise3::find_closest_t(double x, double y, double z) const
+  {
+    int N = static_cast<int>(waypoints_.size());
+
+    const int samples_per_seg = 50;
+    const double step = 1.0 / samples_per_seg;
+
+    double best_t = traj_t_;
+    double best_dist_sq = std::numeric_limits<double>::max();
+
+    for (int s = 0; s <= N * samples_per_seg; s++)
+    {
+      double t = traj_t_ + s * step;
+      auto pt = sample_spline(t);
+      double dx = pt[0] - x, dy = pt[1] - y, dz = pt[2] - z;
+      double dist_sq = dx * dx + dy * dy + dz * dz;
+      if (dist_sq < best_dist_sq)
+      {
+        best_dist_sq = dist_sq;
+        best_t = t;
+      }
+    }
+    return best_t;
+  }
+
+  double DroneCourseExercise3::find_lookahead_t(double t_proj, double lookahead) const
+  {
+    int N = static_cast<int>(waypoints_.size());
+    const double dt_arc = 0.02;
+    const double max_search = static_cast<double>(N);
+
+    double t = t_proj;
+    double arc = 0.0;
+
+    while (arc < lookahead && (t - t_proj) < max_search)
+    {
+      auto p1 = sample_spline(t);
+      auto p2 = sample_spline(t + dt_arc);
+      double dx = p2[0] - p1[0], dy = p2[1] - p1[1], dz = p2[2] - p1[2];
+      double seg_len = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+      if (arc + seg_len >= lookahead)
+      {
+        t += dt_arc * (lookahead - arc) / seg_len;
+        break;
+      }
+      arc += seg_len;
+      t += dt_arc;
+    }
+    return t;
+  }
+
   void DroneCourseExercise3::timer_callback()
   {
     if (!path_received_)
     {
-      // (TODO) Exercise 1: Send the request and process the path message
       path_service_request_ = std::make_shared<drone_course_msgs::srv::RequestPath::Request>();
       rclcpp::Client<drone_course_msgs::srv::RequestPath>::SharedFuture future =
           path_service_client_->async_send_request(path_service_request_).future.share();
@@ -88,20 +245,22 @@ namespace drone_course
       std::vector<drone_course_msgs::msg::Point> path = future.get()->path;
       if (path.size() > 0)
       {
-        RCLCPP_INFO(this->get_logger(), "Path received successfully");
-        // Process the received path here
-        for (size_t i = 0; i < path.size(); i++)
+        RCLCPP_INFO(this->get_logger(), "Path received successfully (%zu waypoints)", path.size());
+        waypoints_.clear();
+        for (const auto &pt : path)
         {
-          path_[3 * i] = path[i].x;
-          path_[3 * i + 1] = path[i].y;
-          path_[3 * i + 2] = path[i].z;
+          double x = static_cast<double>(pt.x) + (pt.x < 7.0f ? 1.0 : -1.0);
+          waypoints_.push_back({x,
+                                static_cast<double>(pt.y),
+                                static_cast<double>(pt.z)});
         }
+        build_spline();
+        traj_ready_ = true;
         path_received_ = true;
       }
       else
       {
         RCLCPP_ERROR(this->get_logger(), "Failed to get path");
-        path_received_ = false;
       }
     }
 
@@ -115,11 +274,8 @@ namespace drone_course
       control_mode_request->control_mode.reference_frame =
           as2_msgs::msg::ControlMode::LOCAL_ENU_FRAME;
 
-      // TODO(Exercise 1): Send control mode service request
       rclcpp::Client<as2_msgs::srv::SetControlMode>::SharedFuture future =
-          control_mode_service_client_->async_send_request(
-                                          control_mode_request)
-              .future.share();
+          control_mode_service_client_->async_send_request(control_mode_request).future.share();
       future.wait();
       as2_msgs::srv::SetControlMode::Response::SharedPtr response = future.get();
       if (response->success)
@@ -130,67 +286,40 @@ namespace drone_course
       else
       {
         RCLCPP_ERROR(this->get_logger(), "Failed to set control mode");
-        control_mode_set_ = false;
       }
     }
 
-    // Desired position reference
-    std::array<double, 3> position_ref = {path_[3 * path_index_],
-                                          path_[3 * path_index_ + 1],
-                                          path_[3 * path_index_ + 2]};
+    if (!traj_ready_ || !control_mode_set_)
+      return;
 
     // Read current drone state
     double current_x = state_pose_.pose.position.x;
     double current_y = state_pose_.pose.position.y;
     double current_z = state_pose_.pose.position.z;
 
-    double position_error_x = position_ref[0] - current_x;
-    double position_error_y = position_ref[1] - current_y;
-    double position_error_z = position_ref[2] - current_z;
-    double position_error_norm = std::sqrt(
-        position_error_x * position_error_x + position_error_y * position_error_y + position_error_z * position_error_z);
+    traj_t_ = find_closest_t(current_x, current_y, current_z);
+    double t_look = find_lookahead_t(traj_t_, lookahead_dist_);
+    auto lookahead_pt = sample_spline(t_look);
 
-    // Compute velocity commands
-    double Kp = 3.5;
-    double Ki = 0.1;
-    double Kd = 1.0;
-    const double max_velocity = 4.0;
+    double dx = lookahead_pt[0] - current_x;
+    double dy = lookahead_pt[1] - current_y;
+    double dz = lookahead_pt[2] - current_z;
 
-    const double max_integral = max_velocity / Ki;
-    integral_x_ = std::clamp(integral_x_ + position_error_x * dt_, -max_integral, max_integral);
-    integral_y_ = std::clamp(integral_y_ + position_error_y * dt_, -max_integral, max_integral);
-    integral_z_ = std::clamp(integral_z_ + position_error_z * dt_, -max_integral, max_integral);
+    double Kpp = desired_speed_ / lookahead_dist_;
+    double velocity_x = Kpp * dx;
+    double velocity_y = Kpp * dy;
+    double velocity_z = Kpp * dz;
 
-    // Skip derivative on first call to avoid spike from uninitialized previous_error
-    double derivative_x = 0;
-    double derivative_y = 0;
-    double derivative_z = 0;
-    if (pid_initialized_)
+    double speed = std::sqrt(velocity_x * velocity_x + velocity_y * velocity_y + velocity_z * velocity_z);
+    if (speed > desired_speed_)
     {
-      derivative_x = (position_error_x - previous_error_x_) / dt_;
-      derivative_y = (position_error_y - previous_error_y_) / dt_;
-      derivative_z = (position_error_z - previous_error_z_) / dt_;
-    }
-    else
-    {
-      pid_initialized_ = true;
+      double scale = desired_speed_ / speed;
+      velocity_x *= scale;
+      velocity_y *= scale;
+      velocity_z *= scale;
     }
 
-    previous_error_x_ = position_error_x;
-    previous_error_y_ = position_error_y;
-    previous_error_z_ = position_error_z;
-
-    double velocity_x = std::clamp(
-        Kp * position_error_x + Ki * integral_x_ + Kd * derivative_x,
-        -max_velocity, max_velocity);
-    double velocity_y = std::clamp(
-        Kp * position_error_y + Ki * integral_y_ + Kd * derivative_y,
-        -max_velocity, max_velocity);
-    double velocity_z = std::clamp(
-        Kp * position_error_z + Ki * integral_z_ + Kd * derivative_z,
-        -max_velocity, max_velocity);
-
-    // Generate motion reference command
+    // Publish velocity command
     geometry_msgs::msg::TwistStamped velocity_msg;
     velocity_msg.header.stamp = this->get_clock()->now();
     velocity_msg.header.frame_id = "earth";
@@ -205,15 +334,6 @@ namespace drone_course
     {
       vel_pub_->publish(velocity_msg);
     }
-
-    if (position_error_norm < 0.2)
-    {
-      RCLCPP_INFO(this->get_logger(), "Drone has reach the target position");
-      path_index_ = (path_index_ + 1) % (path_.size() / 3);
-      integral_x_ = 0.0;
-      integral_y_ = 0.0;
-      integral_z_ = 0.0;
-    }
   }
 
   void DroneCourseExercise3::state_subscription_callback(
@@ -221,4 +341,5 @@ namespace drone_course
   {
     state_pose_ = *msg;
   }
+
 } // namespace drone_course
