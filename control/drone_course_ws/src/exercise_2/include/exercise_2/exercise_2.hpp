@@ -26,7 +26,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-
 #ifndef EXERCISE_2__EXERCISE_2_HPP_
 #define EXERCISE_2__EXERCISE_2_HPP_
 
@@ -47,71 +46,80 @@
 namespace drone_course
 {
 
-/**
- * @brief Class DroneCourseExercise2
- */
-class DroneCourseExercise2 : public rclcpp::Node
-{
-public:
   /**
-   * @brief Construct a new DroneCourse object
-   *
-   * @param node_name Node name
-   * @param options Node options
+   * @brief Class DroneCourseExercise2
    */
-  explicit DroneCourseExercise2(
-    const std::string & node_name = "drone_course_exercise_2_node",
-    const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+  class DroneCourseExercise2 : public rclcpp::Node
+  {
+  public:
+    /**
+     * @brief Construct a new DroneCourse object
+     *
+     * @param node_name Node name
+     * @param options Node options
+     */
+    explicit DroneCourseExercise2(
+        const std::string &node_name = "drone_course_exercise_2_node",
+        const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
-  /**
-   * @brief Destroy the DroneCourseExercise2 object
-   */
-  ~DroneCourseExercise2();
+    /**
+     * @brief Destroy the DroneCourseExercise2 object
+     */
+    ~DroneCourseExercise2();
 
-private:
-  // Subscribers
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
+  private:
+    // Subscribers
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
 
-  // Publishers
-  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr vel_pub_;
+    // Publishers
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr vel_pub_;
 
-  // Timers
-  rclcpp::TimerBase::SharedPtr timer_;
+    // Timers
+    rclcpp::TimerBase::SharedPtr timer_;
 
-  rclcpp::CallbackGroup::SharedPtr callback_group_;
+    rclcpp::CallbackGroup::SharedPtr callback_group_;
 
-  // Service clients
-  rclcpp::Client<drone_course_msgs::srv::RequestPath>::SharedPtr path_service_client_;
-  rclcpp::Client<as2_msgs::srv::SetControlMode>::SharedPtr control_mode_service_client_;
-  drone_course_msgs::srv::RequestPath::Request::SharedPtr path_service_request_;
-  drone_course_msgs::srv::RequestPath::Response::SharedPtr path_service_response_;
+    // Service clients
+    rclcpp::Client<drone_course_msgs::srv::RequestPath>::SharedPtr path_service_client_;
+    rclcpp::Client<as2_msgs::srv::SetControlMode>::SharedPtr control_mode_service_client_;
+    drone_course_msgs::srv::RequestPath::Request::SharedPtr path_service_request_;
+    drone_course_msgs::srv::RequestPath::Response::SharedPtr path_service_response_;
 
-  // Class variables
-  geometry_msgs::msg::PoseStamped state_pose_;
-  bool control_mode_set_ = false;
-  bool path_received_ = false;
-  int path_index_ = 0;
-  double dt_ = 0.01;
+    // Class variables
+    geometry_msgs::msg::PoseStamped state_pose_;
+    bool control_mode_set_ = false;
+    bool path_received_ = false;
+    int path_index_ = 0;
+    double dt_ = 0.01;
 
-  std::array<float, 12> path_ = {};
+    std::array<float, 12> path_ = {};
 
-private:
-  // Callbacks Subscribers
+    // PID state
+    double integral_x_ = 0.0;
+    double integral_y_ = 0.0;
+    double integral_z_ = 0.0;
+    double previous_error_x_ = 0.0;
+    double previous_error_y_ = 0.0;
+    double previous_error_z_ = 0.0;
+    bool pid_initialized_ = false;
 
-  /**
-   * @brief Subscription callback
-   *
-   * @param msg geometry_msgs::msg::PoseStamped::SharedPtr Message received
-   */
-  void state_subscription_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
+  private:
+    // Callbacks Subscribers
 
-  // Callbacks Timers
+    /**
+     * @brief Subscription callback
+     *
+     * @param msg geometry_msgs::msg::PoseStamped::SharedPtr Message received
+     */
+    void state_subscription_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
-  /**
-   * @brief Timer callback
-   */
-  void timer_callback();
-};
-}  // namespace drone_course
+    // Callbacks Timers
 
-#endif  // EXERCISE_2__EXERCISE_2_HPP_
+    /**
+     * @brief Timer callback
+     */
+    void timer_callback();
+  };
+} // namespace drone_course
+
+#endif // EXERCISE_2__EXERCISE_2_HPP_
