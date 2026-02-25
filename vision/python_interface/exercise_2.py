@@ -169,5 +169,16 @@ if __name__ == '__main__':
         for corner, label in zip(corners, labels[1]):
             distance = np.sqrt((corner[0] - label[0]) ** 2 + (corner[1] - label[1]) ** 2)
             distances.append(distance)
+    
+    for image, labels in dataset:
+        corners = detect_corners(image)
+        w, h = image.shape[1], image.shape[0]
+        vis = image.copy()
+        for (x, y) in labels:
+            cv2.circle(vis, (int(x*w), int(y*h)), 6, (0, 255, 0), -1)   # ground truth: green
+        for (x, y) in corners:
+            cv2.circle(vis, (int(x*w), int(y*h)), 4, (0, 0, 255), -1)   # detected: red
+        cv2.imshow('corners', vis)
+        cv2.waitKey(0)
 
     print(f'Average distance: {np.mean(distances)}')
