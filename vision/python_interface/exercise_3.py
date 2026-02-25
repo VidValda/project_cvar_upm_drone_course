@@ -31,7 +31,14 @@ import argparse
 import os
 
 import cv2
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
+from scipy.spatial.transform import Rotation
+
+from exercise_2 import detect_corners
 
 Coord3D = tuple[float, float, float]
 Quaternion = tuple[float, float, float, float]
@@ -110,16 +117,63 @@ def rotation_error(o1: Quaternion, o2: Quaternion):
 
 
 def localize_gate(image: np.ndarray) -> list[Localization]:
-    coord_X = 0
-    coord_Y = 0
-    coord_Z = 0
-    quat_x = 0
-    quat_y = 0
-    quat_z = 0
-    quat_w = 0
     # TODO (Exercise 3): Use the code from previous tasks to calculate the camera position relative
     # to the gate.
-    return [((coord_X, coord_Y, coord_Z), (quat_x, quat_y, quat_z, quat_w))]
+    h, w = image.shape[:2]
+
+    corners = detect_corners(image)
+    if len(corners) != 8:
+        return [((0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0))]
+
+    pts_2d = np.array([[cx * w, cy * h] for (cx, cy) in corners], dtype=np.float64)
+
+    outer_gate_size = 2.7
+    inner_gate_size = 1.5
+
+    inner_top_y = -(outer_gate_size + inner_gate_size) / 2.0
+    inner_bottom_y = -(outer_gate_size - inner_gate_size) / 2.0
+
+    pts_3d = np.array([
+        [-outer_gate_size / 2.0, -outer_gate_size, 0.0],  # TL outer 
+        [ outer_gate_size / 2.0, -outer_gate_size, 0.0],  # TR outer 
+        [-inner_gate_size / 2.0,  inner_top_y,     0.0],  # TL inner
+        [ inner_gate_size / 2.0,  inner_top_y,     0.0],  # TR inner
+        [-inner_gate_size / 2.0,  inner_bottom_y,  0.0],  # BL inner
+        [ inner_gate_size / 2.0,  inner_bottom_y,  0.0],  # BR inner
+        [-outer_gate_size / 2.0,  0.0,             0.0],  # BL outer 
+        [ outer_gate_size / 2.0,  0.0,             0.0],  # BR outer 
+    ], dtype=np.float64)
+
+    success, rvec, tvec = cv2.solvePnP(pts_3d, pts_2d, K, DIST_COEFFS, flags=cv2.SOLVEPNP_SQPNP)
+    if not success:
+        return [((0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0))]
+
+    R_obj_to_cam, _ = cv2.Rodrigues(rvec)
+    t_obj_to_cam = tvec
+
+    R_cam_to_obj_cv = R_obj_to_cam.T
+    t_cam_to_obj_cv = -R_cam_to_obj_cv @ t_obj_to_cam
+
+    R_cv_to_world = np.array([
+        [ 0.0,  0.0,  1.0],
+        [-1.0,  0.0,  0.0],
+        [ 0.0, -1.0,  0.0]
+    ])
+    
+    R_cam_to_cv_cam = np.array([
+        [ 0.0, -1.0,  0.0],
+        [ 0.0,  0.0, -1.0],
+        [ 1.0,  0.0,  0.0]
+    ])
+    
+    t_final_world = R_cv_to_world @ t_cam_to_obj_cv
+    tx, ty, tz = t_final_world.flatten()
+
+    R_final_camera_in_world = R_cv_to_world @ R_cam_to_obj_cv @ R_cam_to_cv_cam
+
+    qx, qy, qz, qw = Rotation.from_matrix(R_final_camera_in_world).as_quat()
+    
+    return [((tx, ty, tz), (qw, qx, qy, qz))]
 
 
 def parse_arguments():
@@ -134,6 +188,47 @@ def parse_arguments():
     )
     return parser.parse_args()
 
+
+def visualize_3d(gt_pose, calc_pose):
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    s_out = 2.7
+    gate_x = [0, 0, 0, 0, 0]
+    gate_y = [s_out/2, -s_out/2, -s_out/2, s_out/2, s_out/2]
+    gate_z = [2.7, 2.7, 0.0, 0.0, 2.7]
+    ax.plot(gate_x, gate_y, gate_z, 'k-', linewidth=3, label='Gate')
+
+    def draw_pose(pose, name, line_style):
+        t, q = pose
+        tx, ty, tz = t
+        
+        qw, qx, qy, qz = q
+        R = Rotation.from_quat([qx, qy, qz, qw]).as_matrix()
+        
+        ax.quiver(tx, ty, tz, R[0,0], R[1,0], R[2,0], color='r', length=0.8, linestyle=line_style)
+        ax.quiver(tx, ty, tz, R[0,1], R[1,1], R[2,1], color='g', length=0.8, linestyle=line_style)
+        ax.quiver(tx, ty, tz, R[0,2], R[1,2], R[2,2], color='b', length=0.8, linestyle=line_style)
+        
+        ax.scatter(tx, ty, tz, color='k', s=40)
+        ax.text(tx, ty, tz + 0.2, name, color='k', fontsize=10)
+
+    draw_pose(gt_pose, "Ground Truth", '-')
+    draw_pose(calc_pose, "Estimated", '--')
+
+    ax.set_xlabel('Global X (Forward/Backward)')
+    ax.set_ylabel('Global Y (Left/Right)')
+    ax.set_zlabel('Global Z (Up/Down)')
+    
+    ax.set_box_aspect([1, 1, 1])
+    
+    ax.set_xlim([-4, 1])
+    ax.set_ylim([-3, 3])  
+    ax.set_zlim([0, 4])  
+    
+    plt.title("3D Global Coordinate Debugger")
+    plt.legend()
+    plt.show()
 
 if __name__ == '__main__':
     args = parse_arguments()
@@ -154,10 +249,12 @@ if __name__ == '__main__':
         calculated_pose: Localization = r[2][0]
 
         t_error = translation_error(gt_pose[0], calculated_pose[0])
-        r_error = rotation_error(gt_pose[1], gt_pose[1])
+        r_error = rotation_error(gt_pose[1], calculated_pose[1])
 
         translation_errors.append(t_error)
         orientation_errors.append(r_error)
+        #visualize_3d(gt_pose, calculated_pose)
+        #cv2.waitKey(0)
 
     print('Mean translation error = ', np.mean(translation_errors))
     print('Mean orientation error = ', np.mean(orientation_errors))
