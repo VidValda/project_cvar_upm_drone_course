@@ -151,9 +151,9 @@ namespace drone_course
         position_error_x * position_error_x + position_error_y * position_error_y + position_error_z * position_error_z);
 
     // Compute velocity commands
-    double Kp = 3.5;
+    double Kp = 2.0;
     double Ki = 0.1;
-    double Kd = 1.0;
+    double Kd = 0.5;
     const double max_velocity = 4.0;
 
     const double max_integral = max_velocity / Ki;
