@@ -39,9 +39,64 @@ CornerLabel = tuple[float, float]
 def sort_corners(points):
     return sorted(points, key=lambda p: (p[1], p[0]))
 
+def order_points(pts: np.ndarray) -> np.ndarray:
+    xSorted = pts[np.argsort(pts[:, 0]), :]
+    
+    leftMost = xSorted[:2, :]
+    rightMost = xSorted[2:, :]
+
+    leftMost = leftMost[np.argsort(leftMost[:, 1]), :]
+    (tl, bl) = leftMost
+
+    rightMost = rightMost[np.argsort(rightMost[:, 1]), :]
+    (tr, br) = rightMost
+
+    return np.array([tl, tr, bl, br])
 
 def detect_corners(image: np.ndarray) -> list[CornerLabel]:
     # TODO (Exercise 2): Implement a corner detection algorithm that takes an image as input and returns a list of CornerLabel objects.
+    h, w = image.shape[:2]
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    _, s, _ = cv2.split(hsv)
+    s = cv2.medianBlur(s,7)
+
+    _,binary_img = cv2.threshold(s,50,255,cv2.THRESH_BINARY)
+
+    kernel = np.ones((15,15))
+    binary_img = cv2.morphologyEx(binary_img,cv2.MORPH_CLOSE,kernel)
+    contours, _ = cv2.findContours(binary_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)
+    
+    if len(sorted_contours) < 2:
+        return [] 
+        
+    outer_contour = sorted_contours[0]
+    inner_contour = sorted_contours[1]
+    
+    corners = [None] * 8
+    
+    for idx, contour in enumerate([outer_contour, inner_contour]):
+        peri = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.05 * peri, True)
+        
+        if len(approx) == 4:
+            pts = approx.reshape(4, 2)
+            tl, tr, bl, br = order_points(pts)
+
+            if idx == 0:
+                corners[0] = (float(tl[0]) / w, float(tl[1]) / h)
+                corners[1] = (float(tr[0]) / w, float(tr[1]) / h)
+                corners[6] = (float(bl[0]) / w, float(bl[1]) / h)
+                corners[7] = (float(br[0]) / w, float(br[1]) / h)
+            else:
+                corners[2] = (float(tl[0]) / w, float(tl[1]) / h)
+                corners[3] = (float(tr[0]) / w, float(tr[1]) / h)
+                corners[4] = (float(bl[0]) / w, float(bl[1]) / h)
+                corners[5] = (float(br[0]) / w, float(br[1]) / h)
+                
+    if all(c is not None for c in corners):
+        return corners
     return []
 
 
