@@ -64,7 +64,6 @@ def compute_iou(
     height, width = image.shape[:2]
     mask_ground_truth = np.zeros((height, width), dtype=np.uint8)
     mask_segmentation = np.zeros((height, width), dtype=np.uint8)
-    
     for label in labels:
         if label.polygon is None:
             continue
@@ -82,21 +81,15 @@ def compute_iou(
     intersection = np.bitwise_and(mask_ground_truth, mask_segmentation).sum()
     union = np.bitwise_or(mask_ground_truth, mask_segmentation).sum()
     
+    #cv2.imshow('Mask', mask_segmentation)
+    #cv2.waitKey(0)
+    #cv2.destroyAllWindows()
+    
     if union == 0:
         return 0.0 
     
     return float(intersection) / float(union)
     
-def compute_area(polygon: list[Point]) -> float:
-    n = len(polygon)
-    if n < 3:
-        return 0.0
-    area = 0.0
-    for i in range(n):
-        x0, y0 = polygon[i]
-        x1, y1 = polygon[(i + 1) % n]
-        area += x0 * y1 - y0 * x1
-    return abs(area) / 2.0
 
 def compute_precision(
     image: np.ndarray, labels: list[SegmentationLabel], segmentation: list[SegmentationLabel]

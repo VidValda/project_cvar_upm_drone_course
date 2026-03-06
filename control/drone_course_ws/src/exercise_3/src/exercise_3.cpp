@@ -296,6 +296,11 @@ namespace drone_course
     double current_x = state_pose_.pose.position.x;
     double current_y = state_pose_.pose.position.y;
     double current_z = state_pose_.pose.position.z;
+    double q_w = state_pose_.pose.orientation.w;
+    double q_x = state_pose_.pose.orientation.x;
+    double q_y = state_pose_.pose.orientation.y;
+    double q_z = state_pose_.pose.orientation.z;
+    double current_yaw = std::atan2(2.0 * (q_w * q_z + q_x * q_y), 1.0 - 2.0 * (q_y * q_y + q_z * q_z));
 
     traj_t_ = find_closest_t(current_x, current_y, current_z);
     double t_look = find_lookahead_t(traj_t_, lookahead_dist_);
@@ -304,11 +309,15 @@ namespace drone_course
     double dx = lookahead_pt[0] - current_x;
     double dy = lookahead_pt[1] - current_y;
     double dz = lookahead_pt[2] - current_z;
+    double path_yaw = std::atan2(dy, dx);
+    double yaw_error = path_yaw - current_yaw;
+    yaw_error = std::atan2(std::sin(yaw_error), std::cos(yaw_error));
 
     double Kpp = desired_speed_ / lookahead_dist_;
     double velocity_x = Kpp * dx;
     double velocity_y = Kpp * dy;
     double velocity_z = Kpp * dz;
+    double velocity_yaw = 4.0 * yaw_error;
 
     double speed = std::sqrt(velocity_x * velocity_x + velocity_y * velocity_y + velocity_z * velocity_z);
     if (speed > desired_speed_)
@@ -328,7 +337,7 @@ namespace drone_course
     velocity_msg.twist.linear.z = velocity_z;
     velocity_msg.twist.angular.x = 0.0;
     velocity_msg.twist.angular.y = 0.0;
-    velocity_msg.twist.angular.z = 0.0;
+    velocity_msg.twist.angular.z = velocity_yaw;
 
     if (vel_pub_)
     {

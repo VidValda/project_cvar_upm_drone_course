@@ -98,9 +98,11 @@ namespace drone_course
     double integral_x_ = 0.0;
     double integral_y_ = 0.0;
     double integral_z_ = 0.0;
+    double integral_yaw_ = 0.0;
     double previous_error_x_ = 0.0;
     double previous_error_y_ = 0.0;
     double previous_error_z_ = 0.0;
+    double previous_error_yaw_ = 0.0;
     bool pid_initialized_ = false;
 
   private:
